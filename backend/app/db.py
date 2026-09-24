@@ -10,7 +10,11 @@ DATABASE_URL = os.getenv(
     "postgresql+psycopg://app:app@localhost:5432/backend_exercise",
 )
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    connect_args={"connect_timeout": 5},
+)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 

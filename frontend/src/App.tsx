@@ -1,47 +1,51 @@
-import { CalendarDays, CheckCircle2, Clock3 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { CalendarDays } from "lucide-react";
+import { useState } from "react";
 
 import "./App.css";
-import { mockSlots, type AppointmentSlot } from "./mockSlots";
+import { bookSlot, SlotUnavailableError } from "./api/client";
+import { SlotGrid } from "./components/SlotGrid";
+import { SummaryPanel } from "./components/SummaryPanel";
+import { useSlots } from "./hooks/useSlots";
+import type { AppointmentSlot, BookingResponse } from "./types";
 
-function formatDay(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(value));
-}
-
-function formatTime(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "UTC",
-  }).format(new Date(value));
-}
-
-function groupSlotsByDay(slots: AppointmentSlot[]) {
-  return slots.reduce<Record<string, AppointmentSlot[]>>((groups, slot) => {
-    const key = slot.startsAt.slice(0, 10);
-    groups[key] = groups[key] ?? [];
-    groups[key].push(slot);
-    return groups;
-  }, {});
-}
-
+/**
+ * Top-level screen: loads slots via useSlots, lets the user pick one, and
+ * confirms the booking through the API. Data-fetching detail lives in the
+ * hook/api layer - this component just wires state to the UI pieces.
+ */
 export default function App() {
+  const { slots, isLoading, error, setError, refetch } = useSlots();
   const [selectedSlot, setSelectedSlot] = useState<AppointmentSlot | null>(null);
-  const [confirmedSlot, setConfirmedSlot] = useState<AppointmentSlot | null>(null);
+  const [confirmedBooking, setConfirmedBooking] = useState<BookingResponse | null>(null);
+  const [isBooking, setIsBooking] = useState(false);
 
-  const slotsByDay = useMemo(() => groupSlotsByDay(mockSlots), []);
-
-  function confirmSelection() {
+  /** Attempt to confirm the currently selected slot with the backend. */
+  async function handleConfirm() {
     if (!selectedSlot) {
       return;
     }
 
-    setConfirmedSlot(selectedSlot);
+    setIsBooking(true);
+    setError(null);
+
+    try {
+      const booking = await bookSlot(selectedSlot.startsAt);
+      setConfirmedBooking(booking);
+      setSelectedSlot(null);
+      await refetch(); // the booked slot's doctor count just changed
+    } catch (err) {
+      if (err instanceof SlotUnavailableError) {
+        // The slot was taken between page load and clicking "confirm" -
+        // clear the stale selection and refresh so the user sees reality.
+        setError("That slot was just booked by someone else. Please pick another time.");
+        setSelectedSlot(null);
+        await refetch();
+      } else {
+        setError("Something went wrong while booking. Please try again.");
+      }
+    } finally {
+      setIsBooking(false);
+    }
   }
 
   return (
@@ -60,62 +64,25 @@ export default function App() {
 
         <section className="slot-panel" aria-labelledby="available-slots-title">
           <h2 id="available-slots-title">Available slots</h2>
-          {Object.entries(slotsByDay).map(([day, slots]) => (
-            <div className="day-group" key={day}>
-              <div className="day-title">{formatDay(day)}</div>
-              <div className="slot-grid">
-                {slots.map((slot) => (
-                  <button
-                    className={
-                      selectedSlot?.startsAt === slot.startsAt
-                        ? "slot-button selected"
-                        : "slot-button"
-                    }
-                    key={slot.startsAt}
-                    onClick={() => setSelectedSlot(slot)}
-                    type="button"
-                  >
-                    <span className="slot-time">{formatTime(slot.startsAt)}</span>
-                    <span className="slot-capacity">
-                      {slot.availableDoctors} doctor
-                      {slot.availableDoctors > 1 ? "s" : ""} available
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
+
+          {isLoading && <p className="summary-empty">Loading available slots…</p>}
+          {error && (
+            <p className="status-message" role="alert">
+              {error}
+            </p>
+          )}
+
+          {!isLoading && (
+            <SlotGrid slots={slots} selectedSlot={selectedSlot} onSelect={setSelectedSlot} />
+          )}
         </section>
 
-        <aside className="summary-panel" aria-labelledby="summary-title">
-          <h2 id="summary-title">Summary</h2>
-          {selectedSlot ? (
-            <p className="summary-detail">
-              <strong>{formatDay(selectedSlot.startsAt)}</strong>
-              {formatTime(selectedSlot.startsAt)}
-            </p>
-          ) : (
-            <p className="summary-empty">Select a slot to continue.</p>
-          )}
-
-          <button
-            className="confirm-button"
-            disabled={!selectedSlot}
-            onClick={confirmSelection}
-            type="button"
-          >
-            <Clock3 size={18} aria-hidden="true" />
-            Confirm appointment
-          </button>
-
-          {confirmedSlot && (
-            <div className="status-message" role="status">
-              <CheckCircle2 size={18} aria-hidden="true" />
-              Appointment confirmed for {formatDay(confirmedSlot.startsAt)} at{" "}
-              {formatTime(confirmedSlot.startsAt)}.
-            </div>
-          )}
-        </aside>
+        <SummaryPanel
+          selectedSlot={selectedSlot}
+          isBooking={isBooking}
+          confirmedBooking={confirmedBooking}
+          onConfirm={handleConfirm}
+        />
       </section>
     </main>
   );
