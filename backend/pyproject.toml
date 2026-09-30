@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+# Makes "app" importable as a top-level package when pytest is run from
+# the backend/ directory, without needing PYTHONPATH set manually.
+pythonpath = ["."]
+testpaths = ["tests"]
