@@ -5,6 +5,11 @@ services:
       POSTGRES_DB: backend_exercise
       POSTGRES_USER: app
       POSTGRES_PASSWORD: app
+    ports:
+      # Exposes Postgres to the host too (not just other containers), so
+      # local tools - psql, a locally-run uvicorn, pytest, etc. - can
+      # reach it at localhost:5432 without going through Docker.
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro

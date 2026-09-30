@@ -30,16 +30,24 @@ export default function App() {
 
     try {
       const booking = await bookSlot(selectedSlot.startsAt);
+
       setConfirmedBooking(booking);
       setSelectedSlot(null);
-      await refetch(); // the booked slot's doctor count just changed
+
+      await refetch();
     } catch (err) {
       if (err instanceof SlotUnavailableError) {
         // The slot was taken between page load and clicking "confirm" -
         // clear the stale selection and refresh so the user sees reality.
-        setError("That slot was just booked by someone else. Please pick another time.");
         setSelectedSlot(null);
+
+        // Refresh first, because refetch may clear the existing error.
         await refetch();
+
+        // Set the conflict message after the refresh.
+        setError(
+          "That slot was just booked by someone else. Please pick another time."
+        );
       } else {
         setError("Something went wrong while booking. Please try again.");
       }
@@ -47,6 +55,7 @@ export default function App() {
       setIsBooking(false);
     }
   }
+
 
   return (
     <main className="app-shell">
