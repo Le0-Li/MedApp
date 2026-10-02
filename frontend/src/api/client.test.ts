@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { bookSlot, fetchSlots, SlotUnavailableError } from "./client";
+import { AlreadyBookedError, bookSlot, fetchSlots, SlotUnavailableError } from "./client";
 
 describe("fetchSlots", () => {
   afterEach(() => {
@@ -76,6 +76,15 @@ describe("bookSlot", () => {
       SlotUnavailableError
     );
   });
+
+  it("throws AlreadyBookedError when the user already has a booking", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(new Response(JSON.stringify({ detail: "You already have a booking." }), { status: 409 }));
+
+    await expect(
+      bookSlot("2099-01-01T10:00:00Z")
+    ).rejects.toBeInstanceOf(AlreadyBookedError);
+  });
+
 
   it("throws a generic error on any other failure status", async () => {
     vi.spyOn(global, "fetch").mockResolvedValue(new Response("", { status: 500 }));

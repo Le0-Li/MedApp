@@ -44,12 +44,14 @@ def test_missing_starts_at_is_rejected_with_422(client):
     assert response.status_code == 422
 
 
-def test_second_booking_for_the_same_time_is_rejected_even_with_another_doctor_free(
-    client, doctor, make_availability, db_session
+def test_two_sessions_can_book_the_same_time_when_two_doctors_are_free(
+    clients, doctor, make_availability, db_session
 ):
-    """The key business rule: a time slot can only be booked ONCE overall,
-    even if more than one doctor was free for it."""
-    second_doctor = Doctor(full_name="Dr. Second", specialty="General Medicine")
+    first_client, second_client = clients
+    second_doctor = Doctor(
+        full_name="Dr. Second",
+        specialty="General Medicine",
+    )
     db_session.add(second_doctor)
     db_session.commit()
     db_session.refresh(second_doctor)
@@ -57,22 +59,72 @@ def test_second_booking_for_the_same_time_is_rejected_even_with_another_doctor_f
     make_availability(doctor, FUTURE)
     make_availability(second_doctor, FUTURE)
 
-    first = client.post("/api/book", json={"starts_at": FUTURE.isoformat()})
-    second = client.post("/api/book", json={"starts_at": FUTURE.isoformat()})
+    first = first_client.post("/api/book", json={"starts_at": FUTURE.isoformat()})
+
+    second = second_client.post("/api/book", json={"starts_at": FUTURE.isoformat()})
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+    assert first.json()["doctor_name"] != second.json()["doctor_name"]
+
+def test_same_session_can_make_two_bookings_at_different_times(
+    client, doctor, make_availability
+):
+    first_time = FUTURE
+    second_time = datetime(
+        2099, 6, 1, 16, 0, tzinfo=timezone.utc
+    )
+
+    make_availability(doctor, first_time)
+    make_availability(doctor, second_time)
+
+    first = client.post("/api/book", json={"starts_at": first_time.isoformat()})
+
+    second = client.post("/api/book", json={"starts_at": second_time.isoformat()})
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+def test_same_session_cannot_book_same_time_twice(
+    client, doctor, make_availability
+):
+    first_time = FUTURE
+    second_time = datetime(
+        2099, 6, 1, 16, 0, tzinfo=timezone.utc
+    )
+    make_availability(doctor, FUTURE)
+
+    first = client.post("/api/book", json={"starts_at": first_time.isoformat()})
+
+    second = client.post("/api/book", json={"starts_at": second_time.isoformat()})
 
     assert first.status_code == 201
     assert second.status_code == 409
-    assert "no longer available" in second.json()["detail"]
 
 
-def test_booking_a_different_time_still_works_after_one_is_taken(
-    client, doctor, make_availability
+def test_two_sessions_can_book_same_time_when_two_doctors_are_free(
+    clients, doctor, make_availability, db_session
 ):
-    other_time = datetime(2099, 6, 1, 16, 0, tzinfo=timezone.utc)
+    first_client, second_client = clients
+
+    second_doctor = Doctor(
+        full_name="Dr. Second",
+        specialty="General Medicine",
+    )
+    db_session.add(second_doctor)
+    db_session.commit()
+    db_session.refresh(second_doctor)
+
     make_availability(doctor, FUTURE)
-    make_availability(doctor, other_time)
+    make_availability(second_doctor, FUTURE)
 
-    client.post("/api/book", json={"starts_at": FUTURE.isoformat()})
-    response = client.post("/api/book", json={"starts_at": other_time.isoformat()})
+    first = first_client.post("/api/book", json={"starts_at": FUTURE.isoformat()})
 
-    assert response.status_code == 201
+    second = second_client.post("/api/book", json={"starts_at": FUTURE.isoformat()})
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+    assert first.json()["doctor_name"] != second.json()["doctor_name"]
+

@@ -16,4 +16,3 @@ create database backend_exercise_test;
 
 \i /docker-entrypoint-initdb.d/001_schema.sql
 \i /docker-entrypoint-initdb.d/002_bookings.sql
-\i /docker-entrypoint-initdb.d/003_single_booking_per_slot.sql

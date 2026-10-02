@@ -2,7 +2,7 @@ import { CalendarDays } from "lucide-react";
 import { useState } from "react";
 
 import "./App.css";
-import { bookSlot, SlotUnavailableError } from "./api/client";
+import { AlreadyBookedError, bookSlot, SlotUnavailableError } from "./api/client";
 import { SlotGrid } from "./components/SlotGrid";
 import { SummaryPanel } from "./components/SummaryPanel";
 import { useSlots } from "./hooks/useSlots";
@@ -36,7 +36,13 @@ export default function App() {
 
       await refetch();
     } catch (err) {
-      if (err instanceof SlotUnavailableError) {
+      if (err instanceof AlreadyBookedError) {
+        setSelectedSlot(null);
+
+        setError(
+          "You already have an appointment in this session."
+        );
+      } else if (err instanceof SlotUnavailableError) {
         // The slot was taken between page load and clicking "confirm" -
         // clear the stale selection and refresh so the user sees reality.
         setSelectedSlot(null);

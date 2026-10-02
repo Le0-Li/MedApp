@@ -66,16 +66,34 @@ def test_excludes_slots_in_the_past(client, doctor, make_availability):
     assert _slot_at(response.json(), PAST) is None
 
 
-def test_excludes_a_time_once_it_has_any_booking(client, doctor, make_availability, db_session):
-    """Once a time is booked, it must disappear from the list entirely -
-    not just show one fewer available doctor."""
-    availability = make_availability(doctor, FUTURE)
-    db_session.add(Booking(availability_id=availability.id, starts_at=FUTURE))
+def test_a_booked_doctor_is_removed_but_the_slot_remains_available(
+    client, doctor, make_availability, db_session
+):
+    second_doctor = Doctor(
+        full_name="Dr. Second",
+        specialty="General Medicine",
+    )
+    db_session.add(second_doctor)
+    db_session.commit()
+    db_session.refresh(second_doctor)
+
+    first_availability = make_availability(doctor, FUTURE)
+    make_availability(second_doctor, FUTURE)
+
+    db_session.add(
+        Booking(
+            availability_id=first_availability.id,
+            session_id="test-session",
+            starts_at=FUTURE
+        )
+    )
     db_session.commit()
 
     response = client.get("/api/slots")
-
-    assert _slot_at(response.json(), FUTURE) is None
+    assert response.status_code == 200
+    slot = _slot_at(response.json(), FUTURE)
+    assert slot is not None
+    assert slot["available_doctors"] == 1
 
 
 def test_slots_are_ordered_by_start_time(client, doctor, make_availability):
@@ -89,3 +107,38 @@ def test_slots_are_ordered_by_start_time(client, doctor, make_availability):
     starts_at_values = [slot["starts_at"] for slot in response.json()]
 
     assert starts_at_values == sorted(starts_at_values)
+
+def test_slot_disappears_when_all_doctors_are_booked(
+    client, doctor, make_availability, db_session
+):
+    second_doctor = Doctor(
+        full_name="Dr. Second",
+        specialty="General Medicine",
+    )
+    db_session.add(second_doctor)
+    db_session.commit()
+    db_session.refresh(second_doctor)
+
+    first_availability = make_availability(doctor, FUTURE)
+    second_availability = make_availability(second_doctor, FUTURE)
+
+    db_session.add_all(
+        [
+            Booking(
+                availability_id=first_availability.id,
+                session_id="session-one",
+                starts_at=FUTURE
+            ),
+            Booking(
+                availability_id=second_availability.id,
+                session_id="session-two",
+                starts_at=FUTURE
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = client.get("/api/slots")
+
+    assert response.status_code == 200
+    assert _slot_at(response.json(), FUTURE) is None

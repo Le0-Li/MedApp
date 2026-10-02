@@ -11,14 +11,14 @@ Cleanup is done explicitly at the end instead of relying on a rollback.
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from app.models import Booking, Doctor, DoctorAvailability
 
 STARTS_AT = datetime(2099, 3, 1, 10, 0, tzinfo=timezone.utc)
 
 
-def test_only_one_booking_succeeds_among_concurrent_requests_for_the_same_slot(
+def test_concurrent_bookings_consume_available_doctors_for_same_slot(
     concurrency_client, raw_session_factory
 ):
     """Two doctors are free at the same time. Four simultaneous booking
@@ -66,11 +66,18 @@ def test_only_one_booking_succeeds_among_concurrent_requests_for_the_same_slot(
             responses = list(executor.map(attempt_booking, range(4)))
 
         status_codes = sorted(response.status_code for response in responses)
-        assert status_codes == [201, 409, 409, 409]
+        assert status_codes == [201, 201, 409, 409]
     finally:
         cleanup = raw_session_factory()
         try:
-            cleanup.execute(delete(Booking).where(Booking.starts_at == STARTS_AT))
+            cleanup.execute(
+                delete(Booking).where(Booking.availability_id.in_(
+                        select(DoctorAvailability.id).where(
+                            DoctorAvailability.starts_at == STARTS_AT
+                        )
+                    )
+                )
+            )
             cleanup.execute(
                 delete(DoctorAvailability).where(DoctorAvailability.starts_at == STARTS_AT)
             )

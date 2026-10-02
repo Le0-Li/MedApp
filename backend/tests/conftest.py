@@ -5,15 +5,6 @@ never the dev database the running app uses - so seeded/demo data can
 never leak into test assertions. It's created and schema-migrated
 automatically the first time the Postgres container initializes (see
 db/init/000_test_db.sql for how).
-
-It's still real Postgres, though - not SQLite or a mock - so the
-Postgres-specific behaviour this project actually relies on (the UNIQUE
-constraints and FOR UPDATE SKIP LOCKED that guarantee no double-booking)
-is genuinely exercised, not assumed. Most tests additionally run inside
-their own transaction (a SAVEPOINT nested in an outer transaction) that's
-always rolled back afterwards, for isolation between tests too - the
-exception is concurrency-style tests, which need real independent
-connections and commits (see raw_session_factory / concurrency_client).
 """
 
 import os
@@ -65,7 +56,24 @@ def client(db_session):
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
-    yield TestClient(app)
+    client = TestClient(app)
+    yield client
+    client.close()
+    app.dependency_overrides.clear()
+
+@pytest.fixture()
+def clients(db_session):
+    """Two independent browser sessions sharing the same DB transaction."""
+
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    first = TestClient(app)
+    second = TestClient(app)
+    yield first, second
+    first.close()
+    second.close()
     app.dependency_overrides.clear()
 
 

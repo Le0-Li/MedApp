@@ -12,6 +12,16 @@ const API_BASE_URL =
 export class SlotUnavailableError extends Error {}
 
 /**
+ * Thrown when the current session already has a booking.
+ */
+export class AlreadyBookedError extends Error {
+  constructor(message = "You already have a booking.") {
+    super(message);
+    this.name = "AlreadyBookedError";
+  }
+}
+
+/**
  * Fetch the current list of aggregated, bookable slots from the backend.
  * Throws a generic Error if the request fails.
  */
@@ -25,6 +35,8 @@ export async function fetchSlots(): Promise<SlotResponse[]> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/slots`, {
       signal: controller.signal,
+      // Allows the browser to send the session_id cookie.
+      credentials: "include"
     });
 
     if (!response.ok) {
@@ -54,12 +66,28 @@ export async function fetchSlots(): Promise<SlotResponse[]> {
 export async function bookSlot(startsAt: string): Promise<BookingResponse> {
   const response = await fetch(`${API_BASE_URL}/api/book`, {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ starts_at: startsAt }),
   });
 
   if (response.status === 409) {
-    throw new SlotUnavailableError("This slot was just booked by someone else.");
+    let detail: string | undefined;
+
+    try {
+      const body = await response.json();
+      detail = body.detail;
+    } catch {
+      // Empty or invalid response body.
+    }
+
+    if (detail === "You already have a booking.") {
+      throw new AlreadyBookedError(detail);
+    }
+
+    throw new SlotUnavailableError(
+      detail ?? "This slot is no longer available."
+    );
   }
   if (!response.ok) {
     throw new Error("Booking failed.");

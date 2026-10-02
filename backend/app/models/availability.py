@@ -42,4 +42,5 @@ class DoctorAvailability(Base):
     )
     "Relationship, when doctor is accessed, fetch full Doctor with doctor_id"
     doctor: Mapped[Doctor] = relationship(back_populates="availabilities")
-    booking: Mapped["Booking | None"] = relationship(back_populates="availability")
+    booking: Mapped["Booking | None"] = relationship(back_populates="availability", uselist=False)
+
