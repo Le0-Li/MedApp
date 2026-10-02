@@ -18,14 +18,9 @@ router = APIRouter(prefix="/api", tags=["bookings"])
 def book_slot(payload: BookingRequest, db: Session = Depends(get_db), session_id: str = Depends(get_session_id)) -> BookingOut:
     # Step 1: this session can only have one booking.
     existing_booking = db.execute(
-        select(Booking.id)
-        .join(
-            DoctorAvailability,
-            DoctorAvailability.id == Booking.availability_id,
-        )
-        .where(
+        select(Booking.id).where(
             Booking.session_id == session_id,
-            DoctorAvailability.starts_at == payload.starts_at,
+            Booking.starts_at == payload.starts_at,
         )
     ).scalar_one_or_none()
 
