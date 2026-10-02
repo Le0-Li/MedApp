@@ -14,12 +14,7 @@ export class SlotUnavailableError extends Error {}
 /**
  * Thrown when the current session already has a booking.
  */
-export class AlreadyBookedError extends Error {
-  constructor(message = "You already have a booking.") {
-    super(message);
-    this.name = "AlreadyBookedError";
-  }
-}
+export class AlreadyBookedError extends Error {}
 
 /**
  * Fetch the current list of aggregated, bookable slots from the backend.
@@ -82,7 +77,7 @@ export async function bookSlot(startsAt: string): Promise<BookingResponse> {
     }
 
     if (detail === "You already have a booking.") {
-      throw new AlreadyBookedError(detail);
+      throw new AlreadyBookedError("You already have a booking.");
     }
 
     throw new SlotUnavailableError(
